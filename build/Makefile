@@ -5,7 +5,7 @@ CXXFLAGS = -O0 -Wall
 
 all: $(NAME)
 
-SOURCE = ../src/main.cpp ../src/Organizer.cpp ../src/FileManager.cpp 
+SOURCE = ../src/main.cpp ../src/Organizer.cpp ../src/FileManager.cpp ../src/DirectoryManager.cpp
 
 $(NAME): $(SOURCE)
 	$(CXX) $(CXXFLAGS) $(SOURCE) -o $(NAME)
