@@ -8,8 +8,10 @@ class Organizer {
 private:
     FileManager fileManager;
     DirectoryManager directoryManager;
-    std::vector<std::filesystem::path> htmlFiles;
-    std::vector<std::filesystem::path> cssFiles;
+    std::vector<std::filesystem::path> htmlFilesPaths;
+    std::vector<std::filesystem::path> cssFilesPaths;
+    std::vector<std::string> htmlFiles;
+    std::vector<std::string> cssFiles;
 public:
     Organizer();
     ~Organizer();
