@@ -1,4 +1,5 @@
 #include "../include/DirectoryManager.hpp"
+#include <iostream>
 
 DirectoryManager::DirectoryManager() {
 }
@@ -16,4 +17,14 @@ std::vector<std::filesystem::path> DirectoryManager::findFiles(const std::filesy
         }
     }
     return foundFiles;
+}
+
+void DirectoryManager::createDirectory(const std::filesystem::path& path, const std::string& directoryName) {
+    std::filesystem::path newDir = path / directoryName;
+    if(!std::filesystem::exists(newDir)) {
+        std::filesystem::create_directory(newDir);
+    }
+    else{
+        std::cout << "Directory already exists: " << newDir << std::endl;
+    }
 }

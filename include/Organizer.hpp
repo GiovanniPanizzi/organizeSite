@@ -4,14 +4,20 @@
 #include <string>
 #pragma once
 
+struct FileData {
+    std::string name;
+    std::string content;
+    std::string extension;
+};
+
 class Organizer {
 private:
     FileManager fileManager;
     DirectoryManager directoryManager;
     std::vector<std::filesystem::path> htmlFilesPaths;
     std::vector<std::filesystem::path> cssFilesPaths;
-    std::vector<std::string> htmlFiles;
-    std::vector<std::string> cssFiles;
+    std::vector<FileData> htmlFiles;
+    std::vector<FileData> cssFiles;
 public:
     Organizer();
     ~Organizer();

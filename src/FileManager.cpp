@@ -19,3 +19,13 @@ std::string FileManager::copyContent(const std::string& filePath) {
     return ss.str();
 }
 
+void FileManager::createFile(const std::string& filePath, const std::string& content) {
+    std::fstream file(filePath, std::ios::out);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file: " << filePath << std::endl;
+        return;
+    }
+    file << content;
+    file.close();
+}
+
