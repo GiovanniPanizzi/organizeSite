@@ -1,6 +1,7 @@
 #include <filesystem>
 #include "FileManager.hpp"
 #include "DirectoryManager.hpp"
+#include "Parser.hpp"
 #include <string>
 #pragma once
 
@@ -14,6 +15,7 @@ class Organizer {
 private:
     FileManager fileManager;
     DirectoryManager directoryManager;
+    Parser parser;
     std::vector<std::filesystem::path> htmlFilesPaths;
     std::vector<std::filesystem::path> cssFilesPaths;
     std::vector<FileData> htmlFiles;
