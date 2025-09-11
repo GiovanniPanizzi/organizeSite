@@ -80,6 +80,8 @@ static bool startsWithCI(const std::string& s, size_t i, const std::string& patt
     return true;
 }
 
+
+
 // check if buffer is empty or only whitespace
 bool isBufferEmptyOrWhitespace(const std::string& s) {
     for (char c : s) {
