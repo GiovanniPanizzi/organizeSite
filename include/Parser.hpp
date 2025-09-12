@@ -1,24 +1,18 @@
 #pragma once
+#include "structs.hpp"
 #include <string>
 #include <vector>
 #include <memory>
 #include <unordered_map>
 #include <stack>
 
-struct HtmlNode {
-    std::string tag;
-    std::string content;
-    std::vector<std::unique_ptr<HtmlNode>> children;
-    std::unordered_map<std::string, std::string> attributes;
-    size_t lineNumber;
-};
-
-struct CssRule {
-    std::string style;
-    std::string mediaQuery;
-};
-
 class Parser {
+private:
+    bool startsWithCI(const std::string& s, size_t i, const std::string& pattern);
+    bool isBufferEmptyOrWhitespace(const std::string& s);
+    void skipSpaces(const std::string& s, size_t& i);
+    std::string parseTagName(const std::string& s, size_t& i);
+    std::unordered_map<std::string, std::string> parseAttributes(const std::string& s, size_t& i);
 public:
     Parser();
     ~Parser();

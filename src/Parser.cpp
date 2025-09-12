@@ -10,19 +10,19 @@ Parser::~Parser() {
 /* HELPER FUNCTIONS */
 
 // helper: lowercase
-static std::string toLower(const std::string& s) {
+std::string toLower(const std::string& s) {
     std::string r; r.reserve(s.size());
     for (char c : s) r.push_back(static_cast<char>(std::tolower((unsigned char)c)));
     return r;
 }
 
 // helper: skip whitespace
-static void skipSpaces(const std::string& s, size_t& i) {
+void Parser::skipSpaces(const std::string& s, size_t& i) {
     while (i < s.size() && std::isspace((unsigned char)s[i])) ++i;
 }
 
 // parse tag name starting at i (expects letter at s[i]) -> returns name and new index (first char after name)
-static std::string parseTagName(const std::string& s, size_t& i) {
+std::string Parser::parseTagName(const std::string& s, size_t& i) {
     size_t start = i;
     while (i < s.size() && (std::isalnum((unsigned char)s[i]) || s[i] == '-' || s[i] == ':' )) ++i;
     return s.substr(start, i - start);
@@ -30,7 +30,7 @@ static std::string parseTagName(const std::string& s, size_t& i) {
 
 // parse attributes between current pos (after tag name) and '>' or '/>'
 // returns map and sets i to position of '>' (i points at '>' when returning)
-static std::unordered_map<std::string, std::string> parseAttributes(const std::string& s, size_t& i) {
+std::unordered_map<std::string, std::string> Parser::parseAttributes(const std::string& s, size_t& i) {
     std::unordered_map<std::string, std::string> attrs;
     skipSpaces(s, i);
     while (i < s.size() && s[i] != '>' && !(s[i] == '/' && i + 1 < s.size() && s[i+1] == '>')) {
@@ -72,7 +72,7 @@ static std::unordered_map<std::string, std::string> parseAttributes(const std::s
 }
 
 // sees if at position i the substring s starts with pattern (case-insensitive)
-static bool startsWithCI(const std::string& s, size_t i, const std::string& pattern) {
+bool Parser::startsWithCI(const std::string& s, size_t i, const std::string& pattern) {
     if (i + pattern.size() > s.size()) return false;
     for (size_t k = 0; k < pattern.size(); ++k) {
         if (std::tolower((unsigned char)s[i+k]) != std::tolower((unsigned char)pattern[k])) return false;
@@ -80,15 +80,16 @@ static bool startsWithCI(const std::string& s, size_t i, const std::string& patt
     return true;
 }
 
-
-
 // check if buffer is empty or only whitespace
-bool isBufferEmptyOrWhitespace(const std::string& s) {
+bool Parser::isBufferEmptyOrWhitespace(const std::string& s) {
     for (char c : s) {
         if (!std::isspace((unsigned char)c)) return false;
     }
     return true;
 }
+
+
+/*PUBLIC*/
 
 // main parser
 std::unique_ptr<HtmlNode> Parser::parseHTML(const std::string& html) {

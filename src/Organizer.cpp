@@ -64,6 +64,10 @@ std::string Organizer::findTitle(const HtmlNode* node) {
     return "";
 }
 
+
+
+
+/* API */
 void Organizer::organize(const std::filesystem::path& rootPath) {
     // 1) Find files (recursive) and read contents
     htmlFilesPaths = directoryManager.findFiles(rootPath, ".html");
@@ -158,7 +162,8 @@ void Organizer::organize(const std::filesystem::path& rootPath) {
         directoryManager.createDirectory(organizedRoot, finalDirName);
 
         // create the index.html file inside the site folder (use original content)
-        fileManager.createFile((sitePath / "index.html").string(), htmlFiles[i].content);
+        std::string indexFileRebuilt = htmlBuilder.buildHtml(*htmlTrees[i]);
+        fileManager.createFile((sitePath / "index.html").string(), indexFileRebuilt);
 
         // create html subfolder (only once per site)
         directoryManager.createDirectory(sitePath, "html");
@@ -259,9 +264,9 @@ void Organizer::organize(const std::filesystem::path& rootPath) {
             std::filesystem::path outFile = htmlSubfolder / filename;
 
             // Write file content (we use FileData content stored earlier)
-            fileManager.createFile(outFile.string(), htmlFiles[idx].content);
+            std::string rebuiltContent = htmlBuilder.buildHtml(*htmlTrees[idx]);
+            fileManager.createFile(outFile.string(), rebuiltContent);
         }
 
-        // finished with this index.html site
     } // end for each index.html
 }
