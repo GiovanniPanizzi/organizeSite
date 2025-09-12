@@ -10,15 +10,12 @@ Organizer::~Organizer() {
 void printTree(const HtmlNode* node, const std::string& prefix = "", bool isLast = true) {
     if (!node) return;
 
-    // Stampa il nodo corrente con simboli di albero
     std::cout << prefix;
     std::cout << (isLast ? "└─" : "├─");
     std::cout << (node->tag.empty() ? "[TEXT]" : node->tag) << "\n";
 
-    // Calcola il nuovo prefisso per i figli
     std::string newPrefix = prefix + (isLast ? "  " : "│ ");
 
-    // Itera sui figli
     for (size_t i = 0; i < node->children.size(); ++i) {
         printTree(node->children[i].get(), newPrefix, i == node->children.size() - 1);
     }
@@ -64,24 +61,132 @@ std::string Organizer::findTitle(const HtmlNode* node) {
     return "";
 }
 
+// Funzione di utilità per trovare un attributo in un nodo
+static std::string findAttribute(HtmlNode* node, const std::string& attributeName) {
+    auto it = node->attributes.find(attributeName);
+    if (it != node->attributes.end()) {
+        return it->second;
+    }
+    return "";
+}
 
+// Funzione ricorsiva per la copia profonda di un albero HTML
+std::unique_ptr<HtmlNode> Organizer::cloneTree(const HtmlNode* originalNode) {
+    // Helper lambda: check whether a link is external (http, //, mailto, javascript:, etc.)
+    if (!originalNode) {
+        return nullptr;
+    }
 
+    auto newNode = std::make_unique<HtmlNode>();
+    newNode->tag = originalNode->tag;
+    newNode->content = originalNode->content;
+    newNode->attributes = originalNode->attributes;
 
+    for (const auto& child : originalNode->children) {
+        newNode->children.push_back(cloneTree(child.get()));
+    }
+
+    return newNode;
+}
+
+// Funzione helper per verificare se un link è esterno
+static bool isExternalLink(const std::string& href) {
+    // Controlla se il link inizia con un protocollo
+    return href.rfind("http://", 0) == 0 ||
+           href.rfind("https://", 0) == 0 ||
+           href.rfind("ftp://", 0) == 0 ||
+           href.rfind("mailto:", 0) == 0 ||
+           href.rfind("tel:", 0) == 0;
+}
+
+// Funzione di utilità per risolvere un percorso di file
+std::string resolvePath(const std::filesystem::path& currentPath, const std::string& href, const std::filesystem::path& rootPath) {
+    std::filesystem::path resolved;
+    std::error_code ec;
+
+    if (href.front() == '/') {
+        resolved = std::filesystem::absolute(rootPath / href.substr(1), ec);
+    } else {
+        resolved = std::filesystem::absolute(currentPath.parent_path() / href, ec);
+    }
+
+    if (ec) {
+        return "";
+    }
+    return resolved.lexically_normal().string();
+}
+
+// Funzione ricorsiva per aggiornare i link in un albero HTML
+void Organizer::updateHtmlLinks(HtmlNode* node, size_t currentFileIdx, const std::unordered_set<size_t>& visitedIndices) {
+    if (!node) {
+        return;
+    }
+
+    std::string originalHref = findAttribute(node, "href");
+    std::string originalSrc = findAttribute(node, "src");
+
+    // Process href attribute
+    if (!originalHref.empty()) {
+        if (!isExternalLink(originalHref) && originalHref.front() != '#') {
+            std::string resolvedKey = resolvePath(htmlFilesPaths[currentFileIdx], originalHref, rootPath);
+            if (resolvedKey.empty()) return;
+
+            auto itAbs = absPathToIndex.find(resolvedKey);
+
+            if (itAbs != absPathToIndex.end() && visitedIndices.count(itAbs->second)) {
+                std::string targetFilename = htmlFilesPaths[itAbs->second].filename().string();
+                std::string currentFilename = htmlFilesPaths[currentFileIdx].filename().string();
+                
+                if (targetFilename == "index.html" && currentFilename != "index.html") {
+                    node->attributes["href"] = "../index.html"; // Riferimento corretto per l'index
+                } else if (currentFilename == "index.html") {
+                    node->attributes["href"] = "html/" + targetFilename;
+                } else {
+                    node->attributes["href"] = targetFilename;
+                }
+            }
+        }
+    }
+
+    // Process src attribute
+    if (!originalSrc.empty()) {
+        if (!isExternalLink(originalSrc) && originalSrc.front() != '#') {
+            std::string resolvedKey = resolvePath(htmlFilesPaths[currentFileIdx], originalSrc, rootPath);
+            if (resolvedKey.empty()) return;
+
+            auto itAbs = absPathToIndex.find(resolvedKey);
+
+            if (itAbs != absPathToIndex.end() && visitedIndices.count(itAbs->second)) {
+                std::string targetFilename = htmlFilesPaths[itAbs->second].filename().string();
+                
+                // Assuming all assets go into a new 'assets' directory
+                node->attributes["src"] = "assets/" + targetFilename;
+            }
+        }
+    }
+
+    // Process children recursively
+    for (const auto& child : node->children) {
+        updateHtmlLinks(child.get(), currentFileIdx, visitedIndices);
+    }
+}
 /* API */
+
 void Organizer::organize(const std::filesystem::path& rootPath) {
-    // 1) Find files (recursive) and read contents
+
+    this -> rootPath = rootPath;
     htmlFilesPaths = directoryManager.findFiles(rootPath, ".html");
     cssFilesPaths  = directoryManager.findFiles(rootPath, ".css");
 
+    // Clear previous data
     htmlFiles.clear();
     cssFiles.clear();
     htmlTrees.clear();
 
-    // Map: normalized absolute path string -> index in htmlFiles/htmlFilesPaths/htmlTrees
-    std::unordered_map<std::string, size_t> absPathToIndex;
+    // Mapping file absolute path to their index in htmlFilesPaths
     absPathToIndex.reserve(htmlFilesPaths.size());
 
-    // Read file contents and populate htmlFiles vector preserving the same order as htmlFilesPaths.
+    // Read file contents and populate htmlFiles vector preserving the same order as htmlFilesPaths
     for (size_t i = 0; i < htmlFilesPaths.size(); ++i) {
         const auto& p = htmlFilesPaths[i];
 
@@ -102,17 +207,18 @@ void Organizer::organize(const std::filesystem::path& rootPath) {
     for (const auto& file : htmlFiles) {
         auto tree = parser.parseHTML(file.content);
         if (tree) {
-            // store ownership of the tree; htmlTrees[i] corresponds to htmlFiles[i] / htmlFilesPaths[i]
             htmlTrees.push_back(std::move(tree));
         } else {
-            // push a nullptr to keep indices aligned (optional)
             htmlTrees.push_back(nullptr);
+            std::cerr << "Warning: Failed to parse HTML file: " << file.name << file.extension << "\n";
         }
     }
 
     // 3) Prepare Organized root directory
     std::filesystem::path organizedRoot = rootPath / "Organized";
     directoryManager.createDirectory(rootPath, "Organized");
+
+    /* HELPERS */
 
     // Helper lambda: check whether a link is external (http, //, mailto, javascript:, etc.)
     auto isExternalLink = [](const std::string& href) -> bool {
@@ -138,135 +244,137 @@ void Organizer::organize(const std::filesystem::path& rootPath) {
         return href;
     };
 
-    // 4) Build an index map for fast file lookups by absolute path
-    // (already built as absPathToIndex). For convenience, we also create a map from filename-like keys
-    // (relative filename) to index — but prefer absolute matching to avoid collisions.
+    /* END HELPERS */
+
+    /* THIS IS USEFUL IN CASE SOME FILES ARE NOT PROPERLY LINKED */
     std::unordered_map<std::string, size_t> filenameKeyToIndex;
     filenameKeyToIndex.reserve(htmlFilesPaths.size());
-    for (size_t i = 0; i < htmlFilesPaths.size(); ++i) {
-        // use filename (e.g. "foo.html") as a fallback key
+    for (size_t i = 0; i < htmlFilesPaths.size(); i++) {
         filenameKeyToIndex[htmlFilesPaths[i].filename().string()] = i;
     }
 
-    // 5) For each index.html create site directory, copy index.html, then copy reachable html files
+    // 5) For each index.html create site directory, copy index.html, then copy reachable html files in html subdir
     int nameSuffix = 1;
-    for (size_t i = 0; i < htmlFilesPaths.size(); ++i) {
-        if (htmlFilesPaths[i].filename() != "index.html") continue; // only for index.html files
-
-        // Find a title for the site: if no <title> found, fallback to SiteN
+    for (size_t i = 0; i < htmlFilesPaths.size(); i++) {
+        if (htmlFilesPaths[i].filename() != "index.html") continue;
+        if (!htmlTrees[i]) {
+            std::cerr << "Skipping index.html at " << htmlFilesPaths[i] << " due to parse error.\n";
+            continue;
+        }
         std::string title = findTitle(htmlTrees[i].get());
-        std::string finalDirName = title.empty() ? ("Site" + std::to_string(nameSuffix++)) : title;
 
-        // compute site path and create site folder
-        std::filesystem::path sitePath = organizedRoot / finalDirName;
-        directoryManager.createDirectory(organizedRoot, finalDirName);
+        if(title.empty()) title = "Site";
+        std::string siteDirName = title;
 
-        // create the index.html file inside the site folder (use original content)
-        std::string indexFileRebuilt = htmlBuilder.buildHtml(*htmlTrees[i]);
-        fileManager.createFile((sitePath / "index.html").string(), indexFileRebuilt);
+        // Ensure unique directory name
+        std::filesystem::path siteDirPath = organizedRoot / siteDirName;
+        while (std::filesystem::exists(siteDirPath)) {
+            siteDirName = title + "_" + std::to_string(nameSuffix++);
+            siteDirPath = organizedRoot / siteDirName;
+        }
 
-        // create html subfolder (only once per site)
-        directoryManager.createDirectory(sitePath, "html");
-        std::filesystem::path htmlSubfolder = sitePath / "html";
+        directoryManager.createDirectory(organizedRoot, siteDirName);
+        directoryManager.createDirectory(siteDirPath, "html");
 
-        // BFS over HTML files reachable from this index
-        std::vector<size_t> queue;
+        // Find all reachable HTML files from this index.html
+        std::unordered_set<size_t> reachableIndices;
+        std::vector<std::string> hrefs = findHrefs(htmlTrees[i].get());
+
+        // Transform hrefs into indices
+        std::queue<size_t> queue;
         std::unordered_set<size_t> visited;
-        queue.push_back(i);
+
+        queue.push(i);
         visited.insert(i);
 
-        // while queue not empty, pop front (use index-based queue)
-        for (size_t qi = 0; qi < queue.size(); ++qi) {
-            size_t curIdx = queue[qi];
+        while (!queue.empty()) {
+            size_t curIdx = queue.front();
+            queue.pop();
 
-            // Get hrefs from the parsed tree of current file (skip if no tree)
             if (!htmlTrees[curIdx]) continue;
             auto hrefs = findHrefs(htmlTrees[curIdx].get());
 
-            // resolve each href and decide whether it maps to one of our htmlFilesPaths
             for (const auto& rawHref : hrefs) {
-                // skip fragments, empty hrefs, and external URIs
-                if (rawHref.empty()) continue;
-                if (rawHref.front() == '#') continue;
                 if (isExternalLink(rawHref)) continue;
-
-                // normalize href (strip query/fragment)
                 std::string href = normalizeHrefString(rawHref);
-
-                // Resolve relative href against current file's parent directory
-                std::filesystem::path resolved;
                 if (href.empty()) continue;
 
+                std::filesystem::path resolved;
                 std::error_code ec;
-                // If href looks absolute path (starts with '/'), treat as root-relative to rootPath
-                if (!href.empty() && href.front() == '/') {
-                    // treat as relative to the project root (rootPath)
+
+                if (href.front() == '/') {
                     resolved = std::filesystem::absolute(rootPath / href.substr(1), ec);
                 } else {
-                    // treat as relative to the current html file parent directory
-                    std::filesystem::path parent = htmlFilesPaths[curIdx].parent_path();
-                    resolved = std::filesystem::absolute(parent / href, ec);
+                    resolved = std::filesystem::absolute(htmlFilesPaths[curIdx].parent_path() / href, ec);
                 }
 
                 if (ec) {
-                    // If resolving failed, try fallback: treat as simple filename
-                    auto itF = filenameKeyToIndex.find(href);
-                    if (itF != filenameKeyToIndex.end()) {
-                        size_t foundIdx = itF->second;
-                        if (!visited.count(foundIdx)) {
-                            visited.insert(foundIdx);
-                            queue.push_back(foundIdx);
-                        }
-                    }
+                    //std::cerr << "Warning: Failed to resolve path '" << href << "' from " << htmlFilesPaths[curIdx] << "\n";
                     continue;
                 }
 
-                // Normalize lexical form for matching
                 std::string resolvedKey = resolved.lexically_normal().string();
-
-                // Try exact absolute path match first (best)
                 auto itAbs = absPathToIndex.find(resolvedKey);
                 if (itAbs != absPathToIndex.end()) {
                     size_t foundIdx = itAbs->second;
-                    if (!visited.count(foundIdx)) {
+                    if (visited.find(foundIdx) == visited.end()) {
                         visited.insert(foundIdx);
-                        queue.push_back(foundIdx);
+                        queue.push(foundIdx);
                     }
                     continue;
                 }
 
-                // Fallback: try matching by filename only (e.g. href "foo.html")
                 auto itName = filenameKeyToIndex.find(std::filesystem::path(href).filename().string());
                 if (itName != filenameKeyToIndex.end()) {
                     size_t foundIdx = itName->second;
-                    if (!visited.count(foundIdx)) {
+                    if (visited.find(foundIdx) == visited.end()) {
                         visited.insert(foundIdx);
-                        queue.push_back(foundIdx);
+                        queue.push(foundIdx);
                     }
                     continue;
                 }
 
-                // If nothing matched, we ignore that href (probably external or missing file)
-            } // end for hrefs
-        } // end BFS queue
+                //std::cerr << "Warning: Could not resolve link '" << href << "' in file " << htmlFilesPaths[curIdx] << "\n";
+            }
+        }
 
-        // Now 'visited' contains indices of reachable HTML files (including index itself)
-        // Copy each reachable file into sitePath/html/
-        for (size_t idx : visited) {
-            // skip the index file if you want to keep it only at site root.
-            if (idx == i) {
-                // index is already written to sitePath/index.html
+        reachableIndices = visited;
+
+        // modifie index.html and copy to site directory
+        /* 
+            HANDLE CSS AND HTML LINKS
+        */
+
+        // Rebuild string from html tree
+        std::unique_ptr<HtmlNode> modifiedIndexTree = cloneTree(htmlTrees[i].get());
+
+        // Update links in the cloned tree
+        updateHtmlLinks(modifiedIndexTree.get(), i, reachableIndices);
+
+        // Write modified index.html
+        std::string rebuiltIndexContent = htmlBuilder.buildHtml(*modifiedIndexTree);
+        
+        // Put index.html in site directory
+        fileManager.createFile(siteDirPath / "index.html", rebuiltIndexContent);
+
+        // Copy reachable HTML files into html subdirectory
+        for (const auto& idx : reachableIndices) {
+            if (idx == i) continue; // skip index.html, already handled
+
+            if (!htmlTrees[idx]) {
+                std::cerr << "Skipping HTML file at " << htmlFilesPaths[idx] << " due to parse error.\n";
                 continue;
             }
 
-            // target filename: use original filename (preserve duplicates risk; you may rename to avoid collisions)
-            std::string filename = htmlFilesPaths[idx].filename().string();
-            std::filesystem::path outFile = htmlSubfolder / filename;
+            // Clone and update links
+            std::unique_ptr<HtmlNode> modifiedTree = cloneTree(htmlTrees[idx].get());
+            updateHtmlLinks(modifiedTree.get(), idx, reachableIndices);
 
-            // Write file content (we use FileData content stored earlier)
-            std::string rebuiltContent = htmlBuilder.buildHtml(*htmlTrees[idx]);
-            fileManager.createFile(outFile.string(), rebuiltContent);
+            // Rebuild content
+            std::string rebuiltContent = htmlBuilder.buildHtml(*modifiedTree);
+
+            // Write to html subdirectory
+            fileManager.createFile(siteDirPath / "html" / htmlFilesPaths[idx].filename(), rebuiltContent);
         }
-
-    } // end for each index.html
+    }
 }

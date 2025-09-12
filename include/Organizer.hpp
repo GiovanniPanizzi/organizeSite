@@ -9,6 +9,8 @@
 
 class Organizer {
 private:
+    std::string rootPath;
+    std::unordered_map<std::string, size_t> absPathToIndex;
     FileManager fileManager;
     DirectoryManager directoryManager;
     Parser parser;
@@ -21,6 +23,8 @@ private:
 
     std::vector<std::string> findHrefs(const HtmlNode* node);
     std::string findTitle(const HtmlNode* node);
+    std::unique_ptr<HtmlNode> cloneTree(const HtmlNode* originalNode);
+    void updateHtmlLinks(HtmlNode* node, size_t currentFileIdx, const std::unordered_set<size_t>& visitedIndices);
 public:
     Organizer();
     ~Organizer();
