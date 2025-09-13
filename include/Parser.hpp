@@ -5,6 +5,7 @@
 #include <memory>
 #include <unordered_map>
 #include <stack>
+#include <unordered_set>
 
 class Parser {
 private:
@@ -16,5 +17,5 @@ private:
 public:
     Parser();
     ~Parser();
-    std::unique_ptr<HtmlNode> parseHTML(const std::string& htmlContent);
+    std::unique_ptr<HtmlNode> parseHTML(const std::string& html);
 };

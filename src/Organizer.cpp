@@ -214,6 +214,7 @@ void Organizer::organize(const std::filesystem::path& rootPath) {
         }
     }
 
+    printTree(htmlTrees[0].get());
     // 3) Prepare Organized root directory
     std::filesystem::path organizedRoot = rootPath / "Organized";
     directoryManager.createDirectory(rootPath, "Organized");

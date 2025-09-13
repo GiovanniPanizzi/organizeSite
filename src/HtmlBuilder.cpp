@@ -2,6 +2,9 @@
 
 // Build public API: just forward to recursive worker
 std::string HtmlBuilder::buildHtml(const HtmlNode& node) const {
+    if (node.tag == "root") {
+        return buildNode(*node.children.front());
+    }
     return buildNode(node);
 }
 
